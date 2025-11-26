@@ -53,6 +53,57 @@ Security.setProperty("networkaddress.cache.ttl", "5") // ✅
 -Dsun.net.inetaddr.ttl=5  // ✅ (deprecated but works)
 ```
 
+### Source Code Evidence
+
+From [`InetAddressCachePolicy.java`](https://github.com/corretto/corretto-25/blob/1950d340f1ff06d865af21d46328d565cc2a8946/src/java.base/share/classes/sun/net/InetAddressCachePolicy.java#L30-L141) in the JDK source:
+
+```java
+public final class InetAddressCachePolicy {
+    // The property name used for Security.getProperty()
+    private static final String cachePolicyProp = "networkaddress.cache.ttl";
+
+    // The FALLBACK property name used for System.getProperty()
+    private static final String cachePolicyPropFallback = "sun.net.inetaddr.ttl";
+
+    // Default is 30 seconds
+    public static final int DEFAULT_POSITIVE = 30;
+    private static volatile int cachePolicy = DEFAULT_POSITIVE;
+
+    static {
+        Integer tmp = getProperty(cachePolicyProp, cachePolicyPropFallback);
+        if (tmp != null) {
+            cachePolicy = tmp < 0 ? FOREVER : tmp;
+        }
+        // ...
+    }
+
+    private static Integer getProperty(String cachePolicyProp,
+                                       String cachePolicyPropFallback) {
+        try {
+            // FIRST: Try Security.getProperty() for "networkaddress.cache.ttl"
+            String tmpString = Security.getProperty(cachePolicyProp);
+            if (tmpString != null) {
+                return Integer.valueOf(tmpString);
+            }
+        } catch (NumberFormatException ignored) {}
+
+        try {
+            // FALLBACK: Try System.getProperty() for "sun.net.inetaddr.ttl"
+            String tmpString = System.getProperty(cachePolicyPropFallback);
+            if (tmpString != null) {
+                return Integer.decode(tmpString);
+            }
+        } catch (NumberFormatException ignored) {}
+
+        return null;  // Uses DEFAULT_POSITIVE (30 seconds)
+    }
+}
+```
+
+**The key insight**: The `-D` JVM flag sets **System properties**, but `networkaddress.cache.ttl` is read via `Security.getProperty()`. The JVM only falls back to `System.getProperty()` for the **different property name** `sun.net.inetaddr.ttl`.
+
+This behavior has been consistent across all Java versions from 8 through 25.
+
 ## Recommendations
 
 For Kubernetes/container environments:
