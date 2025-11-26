@@ -14,4 +14,4 @@ RUN javac io/fbg/dns/*.java
 
 # Default command - can be overridden
 ENTRYPOINT ["java", "-cp", "/app"]
-CMD ["io.fbg.dns.DnsTestHarness"]
+CMD ["io.fbg.dns.DnsTestHarnessJava8"]

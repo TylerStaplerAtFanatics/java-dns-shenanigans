@@ -1,5 +1,5 @@
-# Amazon Corretto 25 - Latest version for comparison
-FROM amazoncorretto:25
+# Amazon Corretto 17 - LTS
+FROM amazoncorretto:17
 
 # Install tcpdump for DNS packet capture
 RUN yum install -y tcpdump iproute bind-utils && yum clean all
