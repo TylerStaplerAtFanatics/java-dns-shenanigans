@@ -1,0 +1,90 @@
+name: DNS Cache Configuration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Allow manual triggers
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run comprehensive DNS cache tests
+        run: |
+          chmod +x scripts/run-comprehensive-tests.sh
+          ./scripts/run-comprehensive-tests.sh --quick
+
+      - name: Display test summary
+        if: always()
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Find the latest results directory
+          RESULTS_DIR=$(ls -td results/*/ 2>/dev/null | head -1)
+
+          if [[ -f "${RESULTS_DIR}SUMMARY.md" ]]; then
+            cat "${RESULTS_DIR}SUMMARY.md" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No summary file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dns-cache-test-results
+          path: results/
+          retention-days: 30
+
+      - name: Verify key findings
+        run: |
+          RESULTS_DIR=$(ls -td results/*/ | head -1)
+          RESULTS_FILE="${RESULTS_DIR}results.json"
+
+          echo "Verifying test results..."
+
+          # Check that -Dnetworkaddress.cache.ttl does NOT work (should show default TTL)
+          if grep -q '"config_name": "system_property_networkaddress_ttl_1"' "$RESULTS_FILE"; then
+            # Extract effective_ttl for this config - should be 30 (default, meaning -D was ignored)
+            TTL=$(grep -A20 '"config_name": "system_property_networkaddress_ttl_1"' "$RESULTS_FILE" | grep '"effective_ttl"' | head -1 | grep -o '[0-9]*')
+            if [[ "$TTL" == "30" ]]; then
+              echo "✅ VERIFIED: -Dnetworkaddress.cache.ttl=1 is ignored (TTL remains 30s)"
+            else
+              echo "⚠️  Unexpected: -Dnetworkaddress.cache.ttl=1 shows TTL=$TTL"
+            fi
+          fi
+
+          # Check that -Dsun.net.inetaddr.ttl DOES work
+          if grep -q '"config_name": "system_property_sun_net_ttl_1"' "$RESULTS_FILE"; then
+            TTL=$(grep -A20 '"config_name": "system_property_sun_net_ttl_1"' "$RESULTS_FILE" | grep '"effective_ttl"' | head -1 | grep -o '[0-9]*')
+            if [[ "$TTL" == "1" ]]; then
+              echo "✅ VERIFIED: -Dsun.net.inetaddr.ttl=1 works (TTL=1s)"
+            else
+              echo "❌ FAILED: -Dsun.net.inetaddr.ttl=1 shows TTL=$TTL (expected 1)"
+              exit 1
+            fi
+          fi
+
+          # Check that Security.setProperty() DOES work
+          if grep -q '"config_name": "security_setproperty_ttl_1"' "$RESULTS_FILE"; then
+            TTL=$(grep -A20 '"config_name": "security_setproperty_ttl_1"' "$RESULTS_FILE" | grep '"effective_ttl"' | head -1 | grep -o '[0-9]*')
+            if [[ "$TTL" == "1" ]]; then
+              echo "✅ VERIFIED: Security.setProperty(ttl=1) works (TTL=1s)"
+            else
+              echo "❌ FAILED: Security.setProperty(ttl=1) shows TTL=$TTL (expected 1)"
+              exit 1
+            fi
+          fi
+
+          echo ""
+          echo "All key findings verified!"
