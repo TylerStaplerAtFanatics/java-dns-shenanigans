@@ -47,6 +47,7 @@ jobs:
           retention-days: 30
 
       - name: Verify key findings
+        if: always()
         run: |
           RESULTS_DIR=$(ls -td results/*/ | head -1)
           RESULTS_FILE="${RESULTS_DIR}results.json"

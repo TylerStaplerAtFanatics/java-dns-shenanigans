@@ -281,8 +281,9 @@ echo "| Version | Config | Effective TTL | Source | Cached/Total | Status |" >> 
 echo "|---------|--------|---------------|--------|--------------|--------|" >> "$SUMMARY_FILE"
 
 # Use jq if available, otherwise use grep/awk
+# Note: jq parsing may fail on malformed JSON, so we use || true to prevent script failure
 if command -v jq &> /dev/null; then
-    jq -r '.[] | "| \(.version) | \(.config_name) | \(.config.effective_ttl // "?")s | \(.config.effective_ttl_source // "?") | \(.statistics.cached_queries // "?")/\(.statistics.total_queries // "?") | \(if .success then "✅" else "❌" end) |"' "$RESULTS_FILE" >> "$SUMMARY_FILE"
+    jq -r '.[] | "| \(.version) | \(.config_name) | \(.config.effective_ttl // "?")s | \(.config.effective_ttl_source // "?") | \(.statistics.cached_queries // "?")/\(.statistics.total_queries // "?") | \(if .success then "✅" else "❌" end) |"' "$RESULTS_FILE" >> "$SUMMARY_FILE" 2>/dev/null || echo "| (jq parsing failed - see individual logs) |" >> "$SUMMARY_FILE"
 else
     echo "| (install jq for detailed table) |" >> "$SUMMARY_FILE"
 fi
